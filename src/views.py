@@ -1,10 +1,13 @@
 import datetime as dt
-import logging
 import json
+import logging
 from pathlib import Path
+from typing import Any, Dict, List
+
 import pandas as pd
+
 from src.config import file_path
-from src.utils import get_data, reader_transaction_excel, get_currency_rates, get_stock_price
+from src.utils import get_currency_rates, get_data, get_stock_price, reader_transaction_excel
 
 # Настройка логирования
 logger = logging.getLogger("logs")
@@ -15,9 +18,10 @@ file_handler.setFormatter(file_formatter)
 logger.addHandler(file_handler)
 
 # ROOT_PATH = Path(__file__).resolve().parent.parent
-DATA_DIR = Path(__file__).resolve().parent.parent / 'data'  # Путь к директории с данными
+DATA_DIR = Path(__file__).resolve().parent.parent / "data"  # Путь к директории с данными
 
-def greeting_by_time_of_day():
+
+def greeting_by_time_of_day() -> str:
     """Функция-приветствие"""
     hour = dt.datetime.now().hour
     if 4 <= hour < 12:
@@ -30,25 +34,21 @@ def greeting_by_time_of_day():
         return "Доброй ночи"
 
 
-def create_json_response(expenses_cards, top_transaction_list):
+def create_json_response(expenses_cards: List[Any], top_transaction_list: List[Dict[str, Any]]) -> str:
     """Создает JSON-ответ с приветствием, картами расходов и топ-транзакциями"""
     greeting = greeting_by_time_of_day()
-    response = {
-        "greeting": greeting,
-        "cards": expenses_cards,
-        "top_transactions": top_transaction_list
-    }
+    response = {"greeting": greeting, "cards": expenses_cards, "top_transactions": top_transaction_list}
     return json.dumps(response, ensure_ascii=False, indent=2)
 
 
-def top_transaction(df_transactions):
+def top_transaction(df_transactions: pd.DataFrame) -> List[Dict[str, Any]]:
     """Функция вывода топ 5 транзакций по сумме платежа"""
     logger.info("Начало работы функции top_transaction")
 
     # Убедитесь, что столбец "Дата операции" преобразован в datetime
-    #df_transactions["Дата операции"] = pd.to_datetime(df_transactions["Дата операции"], errors='coerce')
-    df_transactions["Дата операции"] = pd.to_datetime(df_transactions["Дата операции"], format='%d.%m.%Y %H:%M:%S',
-                                                      errors='coerce')
+    df_transactions["Дата операции"] = pd.to_datetime(
+        df_transactions["Дата операции"], format="%d.%m.%Y %H:%M:%S", errors="coerce"
+    )
 
     top_transaction = df_transactions.sort_values(by="Сумма платежа", ascending=False).head(5)
     logger.info("Получен топ 5 транзакций по сумме платежа")
@@ -73,7 +73,7 @@ def top_transaction(df_transactions):
     return top_transaction_list
 
 
-def get_expenses_cards(df_transactions) -> list:
+def get_expenses_cards(df_transactions: pd.DataFrame) -> List[Dict[str, Any]]:
     """Функция, возвращающая расходы по каждой карте"""
     logger.info("Начало выполнения функции get_expenses_cards")
 
@@ -92,7 +92,7 @@ def get_expenses_cards(df_transactions) -> list:
             {
                 "last_digits": card[-4:],
                 "total_spent": abs(expenses),
-                "cashback": abs(round(expenses / 100, 2))  # Расчет кэшбэка
+                "cashback": abs(round(expenses / 100, 2)),  # Расчет кэшбэка
             }
         )
         logger.info(f"Добавлен расход по карте {card}: {abs(expenses)}")
@@ -114,7 +114,7 @@ def transaction_currency(df_transactions: pd.DataFrame, data: str) -> pd.DataFra
     transaction_currency = df_transactions.loc[
         (pd.to_datetime(df_transactions["Дата операции"], dayfirst=True) <= fin_data)
         & (pd.to_datetime(df_transactions["Дата операции"], dayfirst=True) >= start_data)
-        ]
+    ]
     logger.info(f"Получен DataFrame transaction_currency: {transaction_currency}")
 
     return transaction_currency
@@ -130,21 +130,19 @@ if __name__ == "__main__":
     currency_data = get_currency_rates(["USDRUB", "USDEUR"])
     stock_data = get_stock_price(["AAPL", "AMZN", "GOOGL", "MSFT", "TSLA"])
 
-    #json_response = create_json_response(expenses_cards, top_transaction_list, currency_data, stock_data )
     # Создаем JSON-ответ
     json_response = {
         "greeting": "Добрый день",
         "cards": expenses_cards,
         "top_transactions": top_transaction_list,
         "currency_rates": currency_data,
-        "stock_prices": stock_data
+        "stock_prices": stock_data,
     }
 
     # Преобразуем словарь в строку JSON
     json_response_str = json.dumps(json_response, ensure_ascii=False, indent=2)
 
     print(json_response_str)
-
 
     # Пример использования функции transaction_currency
     transaction_currency_df = transaction_currency(df_transactions, "25.11.2021 21:29:17")
