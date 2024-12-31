@@ -49,6 +49,8 @@ def top_transaction(df_transactions: pd.DataFrame) -> List[Dict[str, Any]]:
     df_transactions["Дата операции"] = pd.to_datetime(
         df_transactions["Дата операции"], format="%d.%m.%Y %H:%M:%S", errors="coerce"
     )
+    # Удаляем транзакции с некорректными датами
+    df_transactions = df_transactions.dropna(subset=["Дата операции"])
 
     top_transaction = df_transactions.sort_values(by="Сумма платежа", ascending=False).head(5)
     logger.info("Получен топ 5 транзакций по сумме платежа")
@@ -92,7 +94,7 @@ def get_expenses_cards(df_transactions: pd.DataFrame) -> List[Dict[str, Any]]:
             {
                 "last_digits": card[-4:],
                 "total_spent": abs(expenses),
-                "cashback": abs(round(expenses / 100, 2)),  # Расчет кэшбэка
+                "cashback": round(abs(expenses) * 0.01, 2),  # Расчет кэшбэка
             }
         )
         logger.info(f"Добавлен расход по карте {card}: {abs(expenses)}")

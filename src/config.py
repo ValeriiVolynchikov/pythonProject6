@@ -12,6 +12,8 @@ DATA_DIR = PROJECT_ROOT / 'data'
 # Путь к файлу операций
 file_path = DATA_DIR / 'operations.xlsx'
 
+#file_path = "\\data\\operations.xlsx"
+
 # Путь к директории с логами
 LOG_DIR = PROJECT_ROOT / 'logs'
 os.makedirs(LOG_DIR, exist_ok=True)  # Создаем директорию для логов, если она не существует
@@ -33,4 +35,3 @@ USER_SETTINGS_FILE = DATA_DIR / 'user_settings.json'
 def load_user_settings():
     with open(USER_SETTINGS_FILE) as f:
         return json.load(f)
-
