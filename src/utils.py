@@ -116,19 +116,22 @@ def get_currency_rates(currencies: list) -> list[dict]:
         logger.error(f"Запрос не был успешным. Возможная причина: {response.reason}")
         return None
 
-    else:
-        data = response.json()
-        quotes = data.get("quotes", {})
-        usd = quotes.get("USDRUB")
-        eur_usd = quotes.get("USDEUR")
-        eur = usd / eur_usd
-        logger.info("Функция завершила свою работу")
+    data = response.json()
+    quotes = data.get("quotes", {})
+    usd = quotes.get("USDRUB")  # Это может быть None
+    eur_usd = quotes.get("USDEUR")  # Это может быть None
 
-        return [
-            {"currency": "USD", "rate": round(usd, 2)},
-            {"currency": "EUR", "rate": round(eur, 2)},
-        ]
+    if usd is None or eur_usd is None:
+        logger.error("Курсы валют не найдены в ответе.")
+        return []  # Возвращаем пустой список или другое значение, если курсы не найдены
 
+    eur = usd / eur_usd
+    logger.info("Функция завершила свою работу")
+
+    return [
+        {"currency": "USD", "rate": round(usd, 2)},
+        {"currency": "EUR", "rate": round(eur, 2)},
+    ]
 
 def get_stock_price(stocks: list) -> list[dict]:
     """Функция, возвращающая курсы акций"""
@@ -140,12 +143,16 @@ def get_stock_price(stocks: list) -> list[dict]:
         url = f"https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=IBM&apikey=demo"
         response = requests.get(url)
         if response.status_code != 200:
+            logger.error(f"Запрос не был успешным. Возможная причина: {response.reason}")
+            continue  # Пропускаем неуспешные запросы
 
-            print(f"Запрос не был успешным. Возможная причина: {response.reason}")
+        data_ = response.json()
+        if "Global Quote" not in data_:
+            logger.error(f"Нет данных о цене для акции {stock}. Ответ: {data_}")
+            continue  # Пропускаем акции без данных
 
-        else:
-            data_ = response.json()
-            stock_price.append({"stock": stock, "price": round(float(data_["Global Quote"]["05. price"]), 2)})
+        price = round(float(data_["Global Quote"]["05. price"]), 2)
+        stock_price.append({"stock": stock, "price": price})
+
     logger.info("Функция завершила свою работу")
-
     return stock_price

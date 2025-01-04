@@ -1,7 +1,7 @@
-# src/config.py
+import json
 import os
 from pathlib import Path
-import json
+from typing import Any, Dict, Optional, cast
 
 # Определяем корневую директорию проекта
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -11,8 +11,6 @@ DATA_DIR = PROJECT_ROOT / 'data'
 
 # Путь к файлу операций
 file_path = DATA_DIR / 'operations.xlsx'
-
-#file_path = "\\data\\operations.xlsx"
 
 # Путь к директории с логами
 LOG_DIR = PROJECT_ROOT / 'logs'
@@ -31,7 +29,12 @@ LOGGING_CONFIG = {
 # Получаем путь к пользовательским настройкам
 USER_SETTINGS_FILE = DATA_DIR / 'user_settings.json'
 
+
 # Функция для загрузки пользовательских настроек
-def load_user_settings():
-    with open(USER_SETTINGS_FILE) as f:
-        return json.load(f)
+def load_user_settings() -> Optional[Dict[str, Any]]:
+    """Загружает пользовательские настройки из файла."""
+    try:
+        with open(USER_SETTINGS_FILE) as f:
+            return cast(Optional[Dict[str, Any]], json.load(f))
+    except (FileNotFoundError, json.JSONDecodeError):
+        return None

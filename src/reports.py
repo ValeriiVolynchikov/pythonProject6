@@ -1,14 +1,13 @@
-import datetime
-import json
-import logging
-import os
-from pathlib import Path
-from typing import Any, Optional
-
 import pandas as pd
-
+from datetime import datetime, timedelta
+from typing import Optional
+import os
+import logging
+import json
+from pathlib import Path
 from src.decorators import decorator_spending_by_category
 from src.utils import get_dict_transaction
+
 
 # Определяем пути
 PROJECT_ROOT = Path(__file__).resolve().parent.parent  # Выйти на уровень выше, чтобы достичь корня
@@ -34,38 +33,80 @@ spending_by_category_logger = logging.getLogger()
 
 
 @decorator_spending_by_category
-def spending_by_category(transactions: pd.DataFrame, category: str, date: Optional[str] = None) -> Any:
-    """Функция возвращающая траты за последние 3 месяца по заданной категории"""
+def spending_by_category(transactions: pd.DataFrame, category: str, date: Optional[str] = None) -> str:
+    """Функция возвращающая траты за последние 90 дней по заданной категории."""
+
+    logger.info(f"Запуск функции spending_by_category для категории: {category} и даты: {date}")
 
     final_list = []
 
-    # Определяем начальную дату
+    # Определяем конечную дату
     if date is None:
-        date_start = datetime.datetime.now() - datetime.timedelta(days=90)
+        date_end = pd.Timestamp.now()  # Используем Pandas Timestamp для согласованности
+        logger.info("Дата окончания не указана, используется текущая дата.")
     else:
-        day, month, year = date.split(".")
-        date_obj = datetime.datetime(int(year), int(month), int(day))
-        date_start = date_obj - datetime.timedelta(days=90)
+        date_end = pd.to_datetime(date, format="%d.%m.%Y %H:%M:%S", errors='coerce')  # Преобразуем дату
+        if pd.isna(date_end):  # Проверяем на NaT
+            logger.error(f"Неверный формат даты: {date}")
+            raise ValueError(f"Неверный формат даты: {date}")
 
-    for index, transaction in transactions.iterrows():
-        if transaction["Категория"] == category:
-            if pd.isna(transaction["Дата платежа"]) or isinstance(transaction["Дата платежа"], float):
-                continue
-            try:
-                transaction_date = datetime.datetime.strptime(str(transaction["Дата платежа"]), "%d.%m.%Y")
-                if date_start <= transaction_date <= date_start + datetime.timedelta(days=90):
-                    final_list.append({"date": transaction["Дата платежа"], "amount": transaction["Сумма платежа"]})
-            except ValueError:
-                continue
+    # Начальная дата - 90 дней назад от конечной даты
+    if date_end is not None:  # Убедитесь, что date_end не None
+        date_start = date_end - pd.Timedelta(days=90)
+    else:
+        raise ValueError("date_end должен быть корректной временной меткой.")
 
+    # Преобразуем даты операций и удаляем записи без дат
+    transactions['Дата операции'] = pd.to_datetime(transactions['Дата операции'], format="%d.%m.%Y %H:%M:%S",
+                                                   errors='coerce')
+
+    # Приводим тип к Timestamp
+    transactions['Дата операции'] = transactions['Дата операции'].astype('datetime64[ns]')
+
+    # Удаляем записи с NaT
+    transactions = transactions.dropna(subset=['Дата операции'])
+
+    filtered_transactions = transactions[
+        (transactions["Категория"] == category) &
+        (pd.notna(transactions["Дата операции"]) &
+         transactions["Дата операции"].between(date_start, date_end)) &
+        (transactions["Сумма операции с округлением"] > 0)
+    ]
+
+    logger.info(
+        f"Найдено {len(filtered_transactions)} транзакций для категории '{category}' за период с {date_start} по {date_end}.")
+
+    # Формируем результирующий список
+    for _, transaction in filtered_transactions.iterrows():
+        final_list.append({
+            "date": transaction["Дата операции"].strftime("%d.%m.%Y %H:%M:%S"),
+            "amount": transaction["Сумма операции с округлением"]
+        })
+
+    logger.info(f"Возвращаемый результат: {json.dumps(final_list, indent=4, ensure_ascii=False)}")
+
+    # Возвращаем результат в формате JSON
     return json.dumps(final_list, indent=4, ensure_ascii=False)
 
 
 if __name__ == "__main__":
     try:
         f = pd.DataFrame(get_dict_transaction(str(file_path)))
-        print(spending_by_category(f, "Супермаркеты", "31.12.2021"))
+        logger.info(f"Загруженные данные: \n{f}")  # Логируем загруженные данные
+        result = spending_by_category(f, "Каршеринг", "30.12.2021 19:18:22")
+        logger.info(f"Результат выполнения: {result}")
+        print(result)
     except FileNotFoundError as e:
-        logging.error(e)
+        logger.error("Файл не найден: %s", e)
     except Exception as e:  # Ловим все остальные ошибки
-        logging.error(f"Произошла ошибка: {e}")
+        logger.error("Произошла ошибка: %s", e)
+
+# if __name__ == "__main__":
+#     try:
+#         f = pd.DataFrame(get_dict_transaction(str(file_path)))
+#         print(f"Загруженные данные: \n{f}")  # Выводим загруженные данные для отладки
+#         print(spending_by_category(f, "Супермаркеты", "31.12.2021 16:44:00"))
+#     except FileNotFoundError as e:
+#         logging.error(e)
+#     except Exception as e:  # Ловим все остальные ошибки
+#         logging.error(f"Произошла ошибка: {e}")
