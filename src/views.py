@@ -1,13 +1,13 @@
-import datetime as dt
 import json
 import logging
+from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Dict, List
 
 import pandas as pd
 
 from src.config import file_path
-from src.utils import get_currency_rates, get_data, get_stock_price, reader_transaction_excel
+from src.utils import (get_currency_rates, get_data, get_expenses_cards, get_stock_price, greeting_by_time_of_day,
+                       reader_transaction_excel, top_transaction, transaction_currency)
 
 # Настройка логирования
 logger = logging.getLogger("logs")
@@ -17,116 +17,60 @@ file_formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s: %(me
 file_handler.setFormatter(file_formatter)
 logger.addHandler(file_handler)
 
-# ROOT_PATH = Path(__file__).resolve().parent.parent
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"  # Путь к директории с данными
 
 
-def greeting_by_time_of_day() -> str:
-    """Функция-приветствие"""
-    hour = dt.datetime.now().hour
-    if 4 <= hour < 12:
-        return "Доброе утро"
-    elif 12 <= hour < 17:
-        return "Добрый день"
-    elif 17 <= hour < 22:
-        return "Добрый вечер"
-    else:
-        return "Доброй ночи"
-
-
-def create_json_response(expenses_cards: List[Any], top_transaction_list: List[Dict[str, Any]]) -> str:
-    """Создает JSON-ответ с приветствием, картами расходов и топ-транзакциями"""
-    greeting = greeting_by_time_of_day()
-    response = {"greeting": greeting, "cards": expenses_cards, "top_transactions": top_transaction_list}
-    return json.dumps(response, ensure_ascii=False, indent=2)
-
-
-def top_transaction(df_transactions: pd.DataFrame) -> List[Dict[str, Any]]:
-    """Функция вывода топ 5 транзакций по сумме платежа"""
-    logger.info("Начало работы функции top_transaction")
-
-    # Убедитесь, что столбец "Дата операции" преобразован в datetime
-    df_transactions["Дата операции"] = pd.to_datetime(
-        df_transactions["Дата операции"], format="%d.%m.%Y %H:%M:%S", errors="coerce"
-    )
-    # Удаляем транзакции с некорректными датами
-    df_transactions = df_transactions.dropna(subset=["Дата операции"])
-
-    top_transaction = df_transactions.sort_values(by="Сумма платежа", ascending=False).head(5)
-    logger.info("Получен топ 5 транзакций по сумме платежа")
-
-    result_top_transaction = top_transaction.to_dict(orient="records")
-    top_transaction_list = []
-
-    for transaction in result_top_transaction:
-        if isinstance(transaction["Дата операции"], dt.datetime):  # Проверка на тип
-            top_transaction_list.append(
-                {
-                    "date": transaction["Дата операции"].strftime("%d.%m.%Y"),
-                    "amount": transaction["Сумма платежа"],
-                    "category": transaction["Категория"],
-                    "description": transaction["Описание"],
-                }
-            )
-        else:
-            logger.warning(f"Неверный формат даты: {transaction['Дата операции']}")
-
-    logger.info("Сформирован список топ 5 транзакций")
-    return top_transaction_list
-
-
-def get_expenses_cards(df_transactions: pd.DataFrame) -> List[Dict[str, Any]]:
-    """Функция, возвращающая расходы по каждой карте"""
-    logger.info("Начало выполнения функции get_expenses_cards")
-
-    # Группировка и суммирование расходов
-    cards_dict = (
-        df_transactions.loc[df_transactions["Сумма платежа"] < 0]
-        .groupby(by="Номер карты")["Сумма платежа"]
-        .sum()
-        .to_dict()
-    )
-    logger.debug(f"Получен словарь расходов по картам: {cards_dict}")
-
-    expenses_cards = []
-    for card, expenses in cards_dict.items():
-        expenses_cards.append(
-            {
-                "last_digits": card[-4:],
-                "total_spent": abs(expenses),
-                "cashback": round(abs(expenses) * 0.01, 2),  # Расчет кэшбэка
-            }
-        )
-        logger.info(f"Добавлен расход по карте {card}: {abs(expenses)}")
-
-    logger.info("Завершение выполнения функции get_expenses_cards")
-    return expenses_cards
-
-
-def transaction_currency(df_transactions: pd.DataFrame, data: str) -> pd.DataFrame:
-    """Функция, формирующая расходы в заданном интервале"""
-    logger.info(f"Вызвана функция transaction_currency с аргументами: data={data}")
-    fin_data = get_data(data)
-    logger.debug(f"Получена конечная дата: {fin_data}")
-    start_data = fin_data.replace(day=1)
-    logger.debug(f"Получена начальная дата: {start_data}")
-    fin_data = fin_data.replace(hour=0, minute=0, second=0, microsecond=0) + dt.timedelta(days=1)
-    logger.debug(f"Обновлена конечная дата: {fin_data}")
-
-    transaction_currency = df_transactions.loc[
-        (pd.to_datetime(df_transactions["Дата операции"], dayfirst=True) <= fin_data)
-        & (pd.to_datetime(df_transactions["Дата операции"], dayfirst=True) >= start_data)
+def form_main_page_info(str_time: str) -> str:
+    """Принимает дату в формате строки YYYY-MM-DD HH:MM:SS и возвращает общую информацию в формате
+    json о банковских транзакциях за период с начала месяца до этой даты"""
+    logger.info(f"Запуск функции main с параметром: {str_time}")
+    data = pd.read_excel(file_path)
+    data_df = pd.DataFrame(data)
+    date_obj = datetime.strptime(str_time, "%Y-%m-%d %H:%M:%S")
+    data_df["datetime"] = pd.to_datetime(data_df["Дата операции"], dayfirst=True)
+    json_data = data_df[
+        (data_df["datetime"] >= (date_obj - timedelta(days=date_obj.day - 1))) & (data_df["datetime"] <= date_obj)
     ]
-    logger.info(f"Получен DataFrame transaction_currency: {transaction_currency}")
 
-    return transaction_currency
+    agg_dict = {
+        "greetings": greeting_by_time_of_day(),
+        "cards": get_expenses_cards(data_df, f"{start_date} - {fin_date}"),
+        "top_transactions": top_transaction(json_data, start_date, fin_date),
+        "currency_rates": get_currency_rates(["user_settings.json"]),
+        "stock_prices": get_stock_price(["user_settings.json"]),
+    }
+    return json.dumps(agg_dict, ensure_ascii=False)
+
+    # Логирование результатов
+    logger.info("Собраны данные для JSON ответа")
+    logger.info(f"Greetings: {agg_dict['greetings']}")
+    logger.info(f"Карты: {agg_dict['cards']}")
+    logger.info(f"Топ транзакции: {agg_dict['top_transactions']}")
+    logger.info(f"Курсы валют: {agg_dict['currency_rates']}")
+    logger.info(f"Цены на акции: {agg_dict['stock_prices']}")
+
+    # Вывод в столбик
+    print("\nРезультаты:")
+    for key, value in agg_dict.items():
+        print(f"{key.capitalize()}:")
+        if isinstance(value, list):
+            for item in value:
+                # Преобразуем каждый элемент в строку и выводим
+                print(f"  - {json.dumps(item, ensure_ascii=False)}")
+        else:
+            print(f"  - {value}")
+
+    return json.dumps(agg_dict, ensure_ascii=False)
 
 
 if __name__ == "__main__":
     df_transactions = reader_transaction_excel(str(file_path))
+    # Определяем дату для фильтрации
+    date_input = "17.12.2021 14:52:20"
+    start_date, fin_date = get_data(date_input)
 
-    top_transaction_list = top_transaction(df_transactions)
-    expenses_cards = get_expenses_cards(df_transactions)
+    top_transaction_list = top_transaction(df_transactions, start_date, fin_date)
+    expenses_cards = get_expenses_cards(df_transactions, date_input)
 
     # Получаем данные о курсах валют и акциях
     currency_data = get_currency_rates(["USDRUB", "USDEUR"])
@@ -147,5 +91,5 @@ if __name__ == "__main__":
     print(json_response_str)
 
     # Пример использования функции transaction_currency
-    transaction_currency_df = transaction_currency(df_transactions, "25.11.2021 21:29:17")
+    transaction_currency_df = transaction_currency(df_transactions, date_input)
     print(transaction_currency_df)
