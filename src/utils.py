@@ -5,6 +5,7 @@ import os
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
+
 import pandas as pd
 import requests
 from dotenv import load_dotenv
@@ -72,7 +73,7 @@ def top_transaction(df_transactions: pd.DataFrame, start_date: datetime, fin_dat
     filtered_transactions = filtered_transactions.dropna(subset=["Дата операции"])
 
     # Сортируем по "Сумма платежа" и выбираем топ 5
-    top_transaction = filtered_transactions.sort_values(by="Сумма платежа", ascending=False).head(5)
+    top_transaction = filtered_transactions.sort_values(by="Сумма платежа").head(5)
     logger.info("Получен топ 5 транзакций по сумме платежа")
 
     result_top_transaction = top_transaction.to_dict(orient="records")
@@ -126,6 +127,13 @@ def get_expenses_cards(df_transactions: pd.DataFrame, data: str) -> List[Dict[st
             }
         )
         logger.info(f"Добавлен расход по карте {card}: {abs(expenses)}")
+
+    # Добавлено: Проверка на уникальность карт
+    unique_cards = {card[-4:] for card in cards_dict.keys()}
+    logger.info(f"Уникальные карты: {unique_cards}")
+
+    # Обновлено: Возвращаем только уникальные карты
+    expenses_cards = [card for card in expenses_cards if card["last_digits"] in unique_cards]
 
     logger.info("Завершение выполнения функции get_expenses_cards")
     return expenses_cards
@@ -230,17 +238,23 @@ def get_currency_rates(user_currencies: list) -> list[dict]:
     usd_to_rub = rates.get("RUB")  # Курс доллара к рублю
     # Получаем курс евро к доллару и рассчитываем курс евро к рублю
     eur_to_usd = rates.get("EUR")  # Курс евро к доллару
-    eur_to_rub = usd_to_rub / eur_to_usd if eur_to_usd and usd_to_rub else None  # Курс евро к рублю
 
-    if usd_to_rub is None or eur_to_rub is None:
+    # Проверяем, что у нас есть валидные значения
+    if usd_to_rub is not None and eur_to_usd is not None:
+        eur_to_rub = usd_to_rub / eur_to_usd
+    else:
+        eur_to_rub = None
+
+    result = []
+    if usd_to_rub:
+        result.append({"currency": "USD", "rate": round(usd_to_rub, 2)})
+    if eur_to_rub:
+        result.append({"currency": "EUR", "rate": round(eur_to_rub, 2)})
+
+    if not result:
         logger.error("Курсы валют не найдены в ответе.")
-        return []  # Возвращаем пустой список, если курсы не найдены
 
-    logger.info("Функция завершила свою работу")
-    return [
-        {"currency": "USD", "rate": round(usd_to_rub, 2)},
-        {"currency": "EUR", "rate": round(eur_to_rub, 2)},
-    ]
+    return result
 
 
 def get_stock_price(user_stocks: list) -> list[dict]:
@@ -249,8 +263,7 @@ def get_stock_price(user_stocks: list) -> list[dict]:
     api_key_stock = os.environ.get("API_KEY_STOCK")
     stock_price = []
     for stock in user_stocks:
-        #url = f"https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol={stock}&apikey={api_key_stock}"
-        url = f"https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=IBM&apikey=demo"
+        url = f"https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol={stock}&apikey={api_key_stock}"
         response = requests.get(url)
         if response.status_code != 200:
             logger.error(f"Запрос не был успешным. Возможная причина: {response.reason}")

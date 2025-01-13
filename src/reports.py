@@ -106,13 +106,3 @@ if __name__ == "__main__":
         logger.error("Файл не найден: %s", e)
     except Exception as e:  # Ловим все остальные ошибки
         logger.error("Произошла ошибка: %s", e)
-
-# if __name__ == "__main__":
-#     try:
-#         f = pd.DataFrame(get_dict_transaction(str(file_path)))
-#         print(f"Загруженные данные: \n{f}")  # Выводим загруженные данные для отладки
-#         print(spending_by_category(f, "Супермаркеты", "31.12.2021 16:44:00"))
-#     except FileNotFoundError as e:
-#         logging.error(e)
-#     except Exception as e:  # Ловим все остальные ошибки
-#         logging.error(f"Произошла ошибка: {e}")

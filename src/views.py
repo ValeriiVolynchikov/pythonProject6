@@ -1,6 +1,6 @@
 import json
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
@@ -24,18 +24,31 @@ def form_main_page_info(str_time: str) -> str:
     """Принимает дату в формате строки YYYY-MM-DD HH:MM:SS и возвращает общую информацию в формате
     json о банковских транзакциях за период с начала месяца до этой даты"""
     logger.info(f"Запуск функции main с параметром: {str_time}")
-    data = pd.read_excel(file_path)
+
+    try:
+        data = pd.read_excel(file_path)
+    except Exception as e:
+        logger.error(f"Ошибка при чтении файла: {e}")
+        return json.dumps({"error": "Не удалось прочитать данные."}, ensure_ascii=False)
+
+    try:
+        date_obj = datetime.strptime(str_time, "%Y-%m-%d %H:%M:%S")
+    except ValueError as e:
+        logger.error(f"Ошибка преобразования даты: {e}")
+        return json.dumps({"error": "Некорректный формат даты."}, ensure_ascii=False)
+
     data_df = pd.DataFrame(data)
-    date_obj = datetime.strptime(str_time, "%Y-%m-%d %H:%M:%S")
-    data_df["datetime"] = pd.to_datetime(data_df["Дата операции"], dayfirst=True)
-    json_data = data_df[
-        (data_df["datetime"] >= (date_obj - timedelta(days=date_obj.day - 1))) & (data_df["datetime"] <= date_obj)
-    ]
+    data_df["datetime"] = pd.to_datetime(
+        data_df["Дата операции"], format="%d.%m.%Y %H:%M:%S", dayfirst=True, errors="coerce"
+    )
+
+    json_data = data_df[data_df["datetime"].between(date_obj.replace(day=1), date_obj)]
+    logger.info(f"Количество транзакций за период: {len(json_data)}")
 
     agg_dict = {
         "greetings": greeting_by_time_of_day(),
-        "cards": get_expenses_cards(data_df, f"{start_date} - {fin_date}"),
-        "top_transactions": top_transaction(json_data, start_date, fin_date),
+        "cards": get_expenses_cards(data_df, f"{date_obj.replace(day=1).date()} - {date_obj.date()}"),
+        "top_transactions": top_transaction(json_data, date_obj.replace(day=1), date_obj),
         "currency_rates": get_currency_rates(["user_settings.json"]),
         "stock_prices": get_stock_price(["user_settings.json"]),
     }
