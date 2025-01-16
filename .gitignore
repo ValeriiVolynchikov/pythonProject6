@@ -171,7 +171,6 @@ src/logs
 src/custom_report.json
 src/main_162.py
 utils_162.py
-data/user_settings.json
 *.csv
 *.xlsx
 *.json

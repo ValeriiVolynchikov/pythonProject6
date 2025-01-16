@@ -1,64 +1,45 @@
 import json
-import os
+from pathlib import Path
+from unittest.mock import mock_open, patch
 
 import pytest
 
-from src.config import USER_SETTINGS_FILE, load_user_settings
+from src.config import load_user_currencies, load_user_stocks, user_setting_path
+
+# Тестовые данные
+mock_user_settings = {"user_currencies": ["USD", "EUR"], "user_stocks": ["AAPL", "GOOGL"]}
 
 
-@pytest.fixture(autouse=True)
-def setup_and_teardown():
-    """Фикстура для настройки и очистки окружения перед и после тестов."""
-    # Удаляем файл пользовательских настроек, если он существует
-    if os.path.exists(USER_SETTINGS_FILE):
-        os.remove(USER_SETTINGS_FILE)
-
-    yield  # Позволяем тестам выполняться
-
-    # Удаляем файл пользовательских настроек после тестов
-    if os.path.exists(USER_SETTINGS_FILE):
-        os.remove(USER_SETTINGS_FILE)
+def test_load_user_currencies() -> None:
+    """Тестирование функции загрузки пользовательских валют."""
+    with patch("builtins.open", mock_open(read_data=json.dumps(mock_user_settings))):
+        currencies = load_user_currencies()
+        assert currencies == mock_user_settings["user_currencies"], "Должны получить корректный список валют"
 
 
-def test_load_user_settings_creates_file() -> None:
-    """Тест загружает настройки и проверяет, что файл создается при отсутствии."""
-    settings = load_user_settings()
-
-    # Проверяем, что файл настроек был создан
-    assert os.path.exists(USER_SETTINGS_FILE)
-    assert settings == {}  # Проверяем, что настройки по умолчанию пустые
+def test_load_user_stocks() -> None:
+    """Тестирование функции загрузки пользовательских акций."""
+    with patch("builtins.open", mock_open(read_data=json.dumps(mock_user_settings))):
+        stocks = load_user_stocks()
+        assert stocks == mock_user_settings["user_stocks"], "Должны получить корректный список акций"
 
 
-def test_load_user_settings_returns_correct_data() -> None:
-    """Тест загружает настройки и проверяет, что они возвращаются корректно."""
-    default_settings = {"theme": "dark", "language": "en"}
-
-    # Создаем файл с настройками
-    with open(USER_SETTINGS_FILE, "w", encoding="utf-8") as f:
-        json.dump(default_settings, f)
-
-    settings = load_user_settings()
-    assert settings == default_settings
+def test_user_setting_path() -> None:
+    """Проверка корректности пути к файлу с пользовательскими настройками."""
+    assert user_setting_path.is_file(), "Путь к файлу user_settings.json должен существовать"
 
 
-def test_load_user_settings_handles_file_not_found() -> None:
-    """Тест для обработки отсутствия файла с настройками."""
-    # Удаляем файл настроек, если он существует
-    if os.path.exists(USER_SETTINGS_FILE):
-        os.remove(USER_SETTINGS_FILE)
-
-    settings = load_user_settings()
-
-    # Проверяем, что файл настроек был создан
-    assert os.path.exists(USER_SETTINGS_FILE)
-    assert settings == {}  # Проверяем, что настройки по умолчанию пустые
+def test_data_directory() -> None:
+    """Проверка корректности пути к директории с данными."""
+    data_dir = Path(__file__).resolve().parent.parent / "data"
+    assert data_dir.is_dir(), "Директория данных должна существовать"
 
 
-def test_load_user_settings_handles_json_decode_error() -> None:
-    """Тест для обработки ошибок при декодировании JSON."""
-    # Создаем файл с некорректным JSON
-    with open(USER_SETTINGS_FILE, "w", encoding="utf-8") as f:
-        f.write("not a json")
+def test_log_directory() -> None:
+    """Проверка создания директории для логов."""
+    log_dir = Path(__file__).resolve().parent.parent / "logs"
+    assert log_dir.is_dir(), "Директория логов должна существовать"
 
-    settings = load_user_settings()
-    assert settings is None  # Проверяем, что возвращается None
+
+if __name__ == "__main__":
+    pytest.main()
