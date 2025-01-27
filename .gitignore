@@ -167,3 +167,14 @@ src/config.json
 tests/spending_by_category.json
 spending_by_category.json
 src/spending_by_category.json
+src/logs
+src/custom_report.json
+src/main_162.py
+utils_162.py
+*.csv
+*.xlsx
+*.json
+*.iml
+*.ipr
+*.iws
+.vscode/

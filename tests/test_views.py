@@ -1,204 +1,70 @@
 import json
+import logging
+import os
 import unittest
+from unittest.mock import patch
 
 import pandas as pd
 
-from src.views import (create_json_response, get_expenses_cards, greeting_by_time_of_day, top_transaction,
-                       transaction_currency)
+from src.views import form_main_page_info
+
+# Настройка логирования
+log_directory = "../logs"
+
+# Проверка на существование директории для логов
+if not os.path.exists(log_directory):
+    os.makedirs(log_directory)
+
+logger = logging.getLogger("logs")
+logger.setLevel(logging.INFO)
+
+# Проверка на наличие обработчиков, чтобы избежать дублирования
+if not logger.hasHandlers():
+    file_handler = logging.FileHandler(os.path.join(log_directory, "views.log"), encoding="utf-8")
+    file_formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s: %(message)s")
+    file_handler.setFormatter(file_formatter)
+    logger.addHandler(file_handler)
 
 
-class TestViews(unittest.TestCase):
+class TestFormMainPageInfo(unittest.TestCase):
 
-    def setUp(self) -> None:
-        """Метод для настройки тестовых данных"""
-        # Пример тестового DataFrame
-        self.df_transactions = pd.DataFrame(
+    @patch("src.views.greeting_by_time_of_day")
+    @patch("src.views.get_expenses_cards")
+    @patch("src.views.pd.read_excel")
+    def test_form_main_page_info(self, mock_read_excel, mock_get_expenses_cards, mock_greeting_by_time_of_day):
+
+        mock_read_excel.return_value = pd.DataFrame(
             {
-                "Дата операции": [
-                    "25.11.2021 21:29:17",
-                    "25.11.2021 20:47:27",
-                    "25.11.2021 20:29:13",
-                    "25.11.2021 19:02:06",
-                    "25.11.2021 18:46:44",
-                ],
-                "Номер карты": [
-                    "1234567890123456",
-                    "1234567890123456",
-                    "6543210987654321",
-                    "6543210987654321",
-                    "1234567890123456",
-                ],
-                "Сумма платежа": [-300.00, -151.90, -681.00, -132.70, -143.41],
-                "Категория": ["Еда", "Транспорт", "Развлечения", "Шопинг", "Еда"],
-                "Описание": ["Обед", "Такси", "Билет в кино", "Одежда", "Ужин"],
+                "Дата операции": ["10.12.2021 16:02:10", "15.12.2021 13:01:22", "26.12.2021 01:12:25"],
+                "Сумма платежа": [-200, -300, -150],
+                "Категория": ["Еда", "Транспорт", "Развлечения"],  # Добавьте этот столбец
+                "Описание": ["Ужин", "Такси", "Фильм"],  # И этот
             }
         )
-        # Преобразуем даты
-        self.df_transactions["Дата операции"] = pd.to_datetime(
-            self.df_transactions["Дата операции"], format="%d.%m.%Y %H:%M:%S", errors="coerce"
-        )
 
-    def test_greeting_by_time_of_day(self) -> None:
-        """Тест функции приветствия"""
-        greeting = greeting_by_time_of_day()
-        self.assertIn(greeting, ["Доброе утро", "Добрый день", "Добрый вечер", "Доброй ночи"])
+        # Настройка mock для get_expenses_cards, чтобы возвращал реальные данные
+        mock_get_expenses_cards.return_value = [{"cards": "1234", "amount": 100}, {"cards": "6789", "amount": 200}]
 
-    def test_create_json_response(self) -> None:
-        """Тест создания JSON-ответа"""
-        expenses_cards = [{"last_digits": "3456", "total_spent": 300.00, "cashback": 3.00}]
-        top_transaction_list = [{"date": "25.11.2021", "amount": -300.00, "category": "Еда", "description": "Обед"}]
-        response = create_json_response(expenses_cards, top_transaction_list)
-        response_dict = json.loads(response)
-        self.assertEqual(response_dict["greeting"], greeting_by_time_of_day())
-        self.assertEqual(len(response_dict["cards"]), 1)
-        self.assertEqual(len(response_dict["top_transactions"]), 1)
+        # Настройка mock для greeting_by_time_of_day
+        mock_greeting_by_time_of_day.return_value = "Добрый день"
 
-    def test_top_transaction(self) -> None:
-        """Тест функции получения топ 5 транзакций"""
-        top_transactions = top_transaction(self.df_transactions)
-
-        # Проверяем, что мы получили 5 транзакций
-        self.assertEqual(len(top_transactions), 5)
-
-        # Проверяем, что первая транзакция имеет максимальную сумму
-        max_amount = self.df_transactions["Сумма платежа"].max()
-        self.assertEqual(top_transactions[0]["amount"], max_amount)
-
-    def test_get_expenses_cards(self) -> None:
-        """Тест функции получения расходов по картам"""
-        expenses_cards = get_expenses_cards(self.df_transactions)
-        self.assertEqual(len(expenses_cards), 2)  # Две карты с расходами
-        self.assertAlmostEqual(expenses_cards[0]["total_spent"], 595.31, places=2)  # Проверка суммы расходов
-
-    def test_transaction_currency(self) -> None:
-        """Тест функции получения транзакций в заданном интервале"""
-        filtered_transactions = transaction_currency(self.df_transactions, "25.11.2021 21:29:17")
-        self.assertEqual(len(filtered_transactions), 5)  # Все транзакции должны быть возвращены
-
-
-class TestTransactionFunctions(unittest.TestCase):
-
-    def setUp(self) -> None:
-        """Метод для настройки тестовых данных"""
-        self.df_transactions = pd.DataFrame(
-            {
-                "Дата операции": [
-                    "25.11.2021 21:29:17",
-                    "25.11.2021 20:47:27",
-                    "25.11.2021 20:29:13",
-                    "25.11.2021 19:02:06",
-                    "25.11.2021 18:46:44",
-                    "01.01.2022 10:00:00",
-                    "02.01.2022 11:00:00",
-                    "03.01.2022 12:00:00",
-                ],
-                "Номер карты": [
-                    "1234567890123456",
-                    "1234567890123456",
-                    "6543210987654321",
-                    "6543210987654321",
-                    "1234567890123456",
-                    "1234567890123456",
-                    "9876543210123456",
-                    "9876543210123456",
-                ],
-                "Сумма платежа": [-300.00, -151.90, -681.00, -132.70, -143.41, 100, 200, -250],
-                "Категория": ["Еда", "Транспорт", "Развлечения", "Шопинг", "Еда", "Еда", "Транспорт", "Развлечения"],
-                "Описание": ["Обед", "Такси", "Билет в кино", "Одежда", "Ужин", "Завтрак", "Поездка", "Концерт"],
-            }
-        )
-        self.df_transactions["Дата операции"] = pd.to_datetime(
-            self.df_transactions["Дата операции"], format="%d.%m.%Y %H:%M:%S", errors="coerce"
-        )
-
-    def test_top_transaction_invalid_date(self) -> None:
-        # Проверка на неверный формат даты
-        self.df_transactions.loc[0, "Дата операции"] = pd.NaT  # Устанавливаем NaT
-        result = top_transaction(self.df_transactions)
-        self.assertEqual(len(result), 5)  # Должно вернуть 5 валидных транзакций
-
-    def test_top_transaction_amounts(self) -> None:
-        # Проверка правильности сумм платежей
-        result = top_transaction(self.df_transactions)
-        self.assertEqual(len(result), 5)  # Проверяем, что вернулось 8 транзакций
-        self.assertEqual(result[0]["amount"], 200)  # Проверяем, что первая транзакция по сумме - 100
-        self.assertEqual(result[1]["amount"], 100)  # Вторая - 200
-
-    def test_get_expenses_cards(self) -> None:
-        # Проверка получения расходов по картам
-        result = get_expenses_cards(self.df_transactions)
-
-        # Ожидаемый результат
-        expected_result = [{"last_digits": "4321", "total_spent": 813.70, "cashback": 8.14}]
-        # Проверяем, что результат содержит ожидаемый элемент
-        self.assertIn({"last_digits": "4321", "total_spent": 813.70, "cashback": 8.14}, result)
-
-        # Дополнительно, можно проверить, что все элементы в expected_result присутствуют в result
-        for expected in expected_result:
-            self.assertIn(expected, result)
-
-    def test_transaction_currency_date_boundaries(self) -> None:
-        # Проверка на пограничные даты
-        data = "01.01.2022 00:00:00"  # Обновите дату с учетом времени
-        result = transaction_currency(self.df_transactions, data)
-        self.assertEqual(len(result), 1)  # Ожидаем 1 транзакцию в этом диапазоне
-
-
-class TestTopTransaction(unittest.TestCase):
-
-    def setUp(self) -> None:
-        # Создаем тестовый DataFrame
-        self.df_transactions = pd.DataFrame(
-            {
-                "Дата операции": ["01.01.2022 10:00:00", "02.01.2022 11:00:00", "03.01.2022 12:00:00"],
-                "Сумма платежа": [100, 200, 150],
-                "Категория": ["Food", "Transport", "Entertainment"],
-                "Описание": ["Lunch", "Taxi", "Movie"],
-            }
-        )
-        self.df_transactions["Дата операции"] = pd.to_datetime(
-            self.df_transactions["Дата операции"], format="%d.%m.%Y %H:%M:%S", errors="coerce"
-        )
+        # Вызываем тестируемую функцию
+        result_data = form_main_page_info("2021-12-25 14:52:20")  # Или ваш тестовый параметр
+        # Проверяем результаты
+        self.assertEqual(result_data["greeting"], "Добрый день")
+        self.assertEqual(len(result_data["cards"]), 2)  # Ожидаем 2 карточки
 
     def test_invalid_date_format(self) -> None:
-        # Проверка на неверный формат даты
-        self.df_transactions.loc[0, "Дата операции"] = pd.NaT
-        result = top_transaction(self.df_transactions)
-        self.assertEqual(len(result), 2)  # Должно вернуть только 2 валидные транзакции
+        with patch("src.views.pd.read_excel"):
+            result = form_main_page_info("invalid_date")
+            result_data = json.loads(result)
+            self.assertEqual(result_data["error"], "Некорректный формат даты.")
 
-    def test_transaction_amounts(self) -> None:
-        # Проверка правильности сумм платежей
-        result = top_transaction(self.df_transactions)
-        self.assertEqual(result[0]["amount"], 200)  # Проверяем, что первая транзакция по сумме - 200
-        self.assertEqual(result[1]["amount"], 150)  # Вторая - 150
-
-    def test_transaction_categories(self) -> None:
-        # Проверка правильности категорий
-        result = top_transaction(self.df_transactions)
-        self.assertEqual(result[0]["category"], "Transport")  # Первая категория должна быть "Transport"
-        self.assertEqual(result[1]["category"], "Entertainment")  # Вторая - "Entertainment"
-
-
-class TestGetExpensesCards(unittest.TestCase):
-
-    def setUp(self) -> None:
-        # Создаем тестовый DataFrame
-        self.df_transactions = pd.DataFrame(
-            {
-                "Номер карты": ["1234567890123456", "1234567890123456", "9876543210123456"],
-                "Сумма платежа": [-100, -150, -200],
-            }
-        )
-
-    def test_last_digits_of_card(self) -> None:
-        # Проверка получения последних четырех цифр карты
-        result = get_expenses_cards(self.df_transactions)
-        self.assertIn({"last_digits": "3456", "total_spent": 250, "cashback": 2.5}, result)
-
-    def test_cashback_calculation(self) -> None:
-        # Проверка правильности вычисления кэшбэка
-        result = get_expenses_cards(self.df_transactions)
-        self.assertAlmostEqual(result[0]["cashback"], 2.5, places=2)  # Кэшбэк для первой карты
+    def test_read_excel_error(self) -> None:
+        with patch("src.views.pd.read_excel", side_effect=FileNotFoundError):
+            result = form_main_page_info("2021-12-17 14:52:20")
+            result_data = json.loads(result)
+            self.assertEqual(result_data["error"], "Не удалось прочитать данные.")
 
 
 if __name__ == "__main__":

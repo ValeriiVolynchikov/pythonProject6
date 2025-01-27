@@ -1,7 +1,7 @@
 import json
 import os
 from pathlib import Path
-from typing import Any, Dict, Optional, cast
+from typing import List
 
 # Определяем корневую директорию проекта
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -26,15 +26,19 @@ LOGGING_CONFIG = {
     'filename': LOG_FILE,
 }
 
-# Получаем путь к пользовательским настройкам
-USER_SETTINGS_FILE = DATA_DIR / 'user_settings.json'
+# Путь к файлу с пользовательскими настройками
+user_setting_path = Path(__file__).parent.parent / "user_settings.json"
 
 
-# Функция для загрузки пользовательских настроек
-def load_user_settings() -> Optional[Dict[str, Any]]:
-    """Загружает пользовательские настройки из файла."""
-    try:
-        with open(USER_SETTINGS_FILE) as f:
-            return cast(Optional[Dict[str, Any]], json.load(f))
-    except (FileNotFoundError, json.JSONDecodeError):
-        return None
+def load_user_currencies() -> List[str]:
+    """Загружает пользовательские валюты из файла user_settings.json."""
+    with open(user_setting_path, encoding="utf-8") as file:
+        content = json.load(file)
+    return [currency for currency in content.get('user_currencies', []) if isinstance(currency, str)]
+
+
+def load_user_stocks() -> List[str]:
+    """Загружает пользовательские акции из файла user_settings.json."""
+    with open(user_setting_path, encoding="utf-8") as file:
+        content = json.load(file)
+    return [stock for stock in content.get('user_stocks', []) if isinstance(stock, str)]
